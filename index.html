@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wallet Checker — BIP39 Verifier</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & tokens ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0b0e;
+      --surface:   #111318;
+      --surface2:  #181c24;
+      --border:    #252a35;
+      --border2:   #2e3545;
+      --text:      #e2e6f0;
+      --muted:     #6b7590;
+      --accent:    #00d4aa;
+      --accent2:   #0090ff;
+      --warn:      #ff6b35;
+      --success:   #00d4aa;
+      --fail:      #ff4757;
+      --mono:      'IBM Plex Mono', monospace;
+      --sans:      'Syne', sans-serif;
+      --radius:    10px;
+      --glow:      0 0 30px rgba(0, 212, 170, 0.12);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 4rem;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* ── Subtle grid background ─────────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,170,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,170,0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* radial glow in center */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -20%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      height: 500px;
+      background: radial-gradient(ellipse at center,
+        rgba(0,212,170,0.06) 0%,
+        rgba(0,144,255,0.04) 40%,
+        transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout wrapper ─────────────────────────────────────────────────────── */
+    .wrapper {
+      width: 100%;
+      max-width: 680px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.35rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 1.2rem;
+    }
+
+    .logo-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    h1 {
+      font-size: clamp(2rem, 6vw, 2.8rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.75rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-family: var(--mono);
+      line-height: 1.6;
+    }
+
+    /* ── Warning banner ─────────────────────────────────────────────────────── */
+    .warning-banner {
+      background: linear-gradient(135deg, rgba(255,107,53,0.12), rgba(255,71,87,0.08));
+      border: 1px solid rgba(255,107,53,0.35);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      margin-bottom: 2rem;
+    }
+
+    .warn-icon {
+      font-size: 1.3rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .warning-banner p {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: #ffb09c;
+      line-height: 1.65;
+    }
+
+    .warning-banner strong {
+      color: var(--warn);
+      display: block;
+      margin-bottom: 0.25rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    /* ── Card ───────────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      transition: border-color 0.3s;
+    }
+
+    .card:hover { border-color: var(--border2); }
+
+    .card-title {
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 1.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .card-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Form elements ──────────────────────────────────────────────────────── */
+    .field { margin-bottom: 1.25rem; }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-family: var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    input, textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      padding: 0.85rem 1rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      resize: none;
+    }
+
+    input::placeholder, textarea::placeholder {
+      color: var(--muted);
+      opacity: 0.6;
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,212,170,0.1);
+    }
+
+    textarea { height: 90px; line-height: 1.7; }
+
+    /* Eye toggle for mnemonic */
+    .field-wrap {
+      position: relative;
+    }
+
+    .toggle-vis {
+      position: absolute;
+      right: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 1rem;
+      padding: 0.2rem;
+      transition: color 0.2s;
+    }
+
+    .toggle-vis:hover { color: var(--accent); }
+
+    /* ── Submit button ──────────────────────────────────────────────────────── */
+    .btn-check {
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, var(--accent) 0%, #00b896 100%);
+      color: #000;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-check::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .btn-check:hover:not(:disabled)::before { opacity: 1; }
+
+    .btn-check:hover:not(:disabled) {
+      box-shadow: 0 8px 28px rgba(0,212,170,0.35);
+      transform: translateY(-1px);
+    }
+
+    .btn-check:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-check:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    /* ── Spinner ────────────────────────────────────────────────────────────── */
+    .spinner-wrap {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      padding: 2.5rem 0;
+    }
+
+    .spinner-wrap.active { display: flex; }
+
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .spinner-label {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ── Results ────────────────────────────────────────────────────────────── */
+    #results { display: none; }
+    #results.visible { display: block; }
+
+    /* Match badge */
+    .match-result {
+      border-radius: 14px;
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+    }
+
+    .match-result.success {
+      background: linear-gradient(135deg, rgba(0,212,170,0.1), rgba(0,212,170,0.05));
+      border: 1px solid rgba(0,212,170,0.3);
+    }
+
+    .match-result.fail {
+      background: linear-gradient(135deg, rgba(255,71,87,0.1), rgba(255,71,87,0.05));
+      border: 1px solid rgba(255,71,87,0.3);
+    }
+
+    .match-icon {
+      font-size: 2.2rem;
+      flex-shrink: 0;
+    }
+
+    .match-label {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .match-result.success .match-label { color: var(--success); }
+    .match-result.fail    .match-label { color: var(--fail);    }
+
+    .match-sub {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    /* Derived info row */
+    .info-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .info-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: baseline;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+    }
+
+    .info-key {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .info-val {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    /* Chain cards grid */
+    .chains-title {
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .chains-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .chains-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+
+    .chain-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem;
+      transition: border-color 0.25s, box-shadow 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .chain-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 12px 12px 0 0;
+    }
+
+    .chain-card.eth::before   { background: linear-gradient(90deg, #627eea, #a0adee); }
+    .chain-card.bsc::before   { background: linear-gradient(90deg, #f0b90b, #f5d54a); }
+    .chain-card.matic::before { background: linear-gradient(90deg, #8247e5, #b07bf7); }
+
+    .chain-card:hover {
+      border-color: var(--border2);
+      box-shadow: var(--glow);
+    }
+
+    .chain-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 0.1rem;
+    }
+
+    .chain-symbol {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    .chain-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.5rem;
+    }
+
+    .chain-stat-key {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .chain-stat-val {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .active-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+      margin-top: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .active-badge.yes {
+      background: rgba(0,212,170,0.12);
+      border: 1px solid rgba(0,212,170,0.3);
+      color: var(--success);
+    }
+
+    .active-badge.no {
+      background: rgba(107,117,144,0.12);
+      border: 1px solid rgba(107,117,144,0.25);
+      color: var(--muted);
+    }
+
+    .active-badge::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+    }
+
+    .active-badge.yes::before { background: var(--success); }
+    .active-badge.no::before  { background: var(--muted); }
+
+    .chain-error {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--warn);
+      margin-top: 0.5rem;
+    }
+
+    /* Sample addresses (on mismatch) */
+    .sample-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      margin-top: 1rem;
+    }
+
+    .sample-title {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 0.65rem;
+    }
+
+    .sample-addr {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.9;
+      word-break: break-all;
+    }
+
+    /* Error box */
+    .error-box {
+      background: rgba(255,71,87,0.08);
+      border: 1px solid rgba(255,71,87,0.3);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: #ff8fa0;
+      display: none;
+    }
+
+    .error-box.visible { display: block; }
+
+    /* ── Footer ─────────────────────────────────────────────────────────────── */
+    footer {
+      margin-top: 3rem;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      line-height: 1.9;
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Fade-in animation ──────────────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-up { animation: fadeUp 0.45s ease both; }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- Header -->
+  <header class="fade-up">
+    <div class="logo-badge">BIP39 · BIP44 · Multi-chain</div>
+    <h1>Wallet Checker</h1>
+    <p class="subtitle">Verify if a seed phrase owns an address.<br>Local derivation · No data leaves your machine.</p>
+  </header>
+
+  <!-- Security warning -->
+  <div class="warning-banner fade-up" style="animation-delay:0.05s">
+    <span class="warn-icon">⚠️</span>
+    <p>
+      <strong>Security Warning</strong>
+      Never enter real wallet seed phrases on any online website.
+      This tool is designed for <em>local use only</em>. Your phrase is processed
+      entirely in your local server — it is <em>never</em> sent to any external service.
+    </p>
+  </div>
+
+  <!-- Input card -->
+  <div class="card fade-up" style="animation-delay:0.1s">
+    <div class="card-title">Wallet Details</div>
+
+    <div class="field">
+      <label for="address">Wallet Address</label>
+      <input
+        id="address"
+        type="text"
+        placeholder="0x... or bc1... or 1BvBM..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <div class="field">
+      <label for="mnemonic">Secret Phrase (BIP39 Mnemonic)</label>
+      <div class="field-wrap">
+        <textarea
+          id="mnemonic"
+          placeholder="word1 word2 word3 ... (12 or 24 words)"
+          autocomplete="off"
+          spellcheck="false"
+        ></textarea>
+      </div>
+      <div style="margin-top:0.45rem; font-family:var(--mono); font-size:0.7rem; color:var(--muted);">
+        Accepts 12 or 24 word BIP39 phrases. Processed locally only.
+      </div>
+    </div>
+
+    <!-- Error display -->
+    <div class="error-box" id="error-box"></div>
+
+    <button class="btn-check" id="btn-check" onclick="checkWallet()">
+      Check Wallet
+    </button>
+  </div>
+
+  <!-- Loading spinner -->
+  <div class="spinner-wrap" id="spinner">
+    <div class="spinner"></div>
+    <div class="spinner-label" id="spinner-label">Deriving addresses…</div>
+  </div>
+
+  <!-- Results -->
+  <div id="results"></div>
+
+</div>
+
+<!-- Footer -->
+<footer class="fade-up" style="animation-delay:0.2s">
+  <div>BIP39 · BIP44 · ethers.js · bitcoinjs-lib</div>
+  <div>Runs locally · Mnemonic never leaves your machine</div>
+  <div style="margin-top:0.5rem; color:rgba(107,117,144,0.5);">For educational &amp; recovery purposes only.</div>
+</footer>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────────
+  let busy = false;
+
+  // ── Spinner label cycle ──────────────────────────────────────────────────────
+  const SPINNER_LABELS = [
+    "Validating mnemonic…",
+    "Generating seed…",
+    "Deriving BIP44 paths…",
+    "Comparing addresses…",
+    "Querying chains…",
+  ];
+  let spinIdx = 0, spinTimer = null;
+
+  function startSpinner() {
+    spinIdx = 0;
+    const el = document.getElementById("spinner-label");
+    el.textContent = SPINNER_LABELS[0];
+    spinTimer = setInterval(() => {
+      spinIdx = (spinIdx + 1) % SPINNER_LABELS.length;
+      el.textContent = SPINNER_LABELS[spinIdx];
+    }, 1400);
+    document.getElementById("spinner").classList.add("active");
+  }
+
+  function stopSpinner() {
+    clearInterval(spinTimer);
+    document.getElementById("spinner").classList.remove("active");
+  }
+
+  // ── Error display ────────────────────────────────────────────────────────────
+  function showError(msg) {
+    const el = document.getElementById("error-box");
+    el.textContent = "⚠ " + msg;
+    el.classList.add("visible");
+  }
+
+  function clearError() {
+    const el = document.getElementById("error-box");
+    el.textContent = "";
+    el.classList.remove("visible");
+  }
+
+  // ── Main check function ──────────────────────────────────────────────────────
+  async function checkWallet() {
+    if (busy) return;
+
+    const address  = document.getElementById("address").value.trim();
+    const mnemonic = document.getElementById("mnemonic").value.trim();
+
+    clearError();
+    document.getElementById("results").innerHTML = "";
+    document.getElementById("results").classList.remove("visible");
+
+    // Client-side validation
+    if (!address) { showError("Please enter a wallet address."); return; }
+    if (!mnemonic) { showError("Please enter your mnemonic phrase."); return; }
+    const words = mnemonic.toLowerCase().replace(/\s+/g, " ").split(" ").filter(Boolean);
+    if (words.length !== 12 && words.length !== 24) {
+      showError(`Mnemonic must have 12 or 24 words. You entered ${words.length}.`);
+      return;
+    }
+
+    busy = true;
+    document.getElementById("btn-check").disabled = true;
+    startSpinner();
+
+    try {
+      const resp = await fetch("/api/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, mnemonic }),
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        throw new Error(data.error || "Server error. Check the console.");
+      }
+
+      renderResults(address, data);
+
+    } catch (err) {
+      showError(err.message || "Unexpected error. Is the server running?");
+    } finally {
+      busy = false;
+      document.getElementById("btn-check").disabled = false;
+      stopSpinner();
+    }
+  }
+
+  // ── Render results ───────────────────────────────────────────────────────────
+  function renderResults(address, data) {
+    const container = document.getElementById("results");
+    container.innerHTML = "";
+
+    // ── Match result badge ──────────────────────────────────────────────────
+    const matchDiv = document.createElement("div");
+    matchDiv.className = `match-result ${data.match ? "success" : "fail"} fade-up`;
+    matchDiv.innerHTML = data.match
+      ? `<span class="match-icon">✅</span>
+         <div>
+           <div class="match-label">Address Verified</div>
+           <div class="match-sub">Derived from mnemonic · ${data.matchType} path</div>
+         </div>`
+      : `<span class="match-icon">❌</span>
+         <div>
+           <div class="match-label">No Match Found</div>
+           <div class="match-sub">This address was not derived from the supplied phrase (first 20 indexes checked)</div>
+         </div>`;
+    container.appendChild(matchDiv);
+
+    // ── Derivation info (success path) ──────────────────────────────────────
+    if (data.match) {
+      const infoRow = document.createElement("div");
+      infoRow.className = "info-row fade-up";
+      infoRow.style.animationDelay = "0.05s";
+
+      infoRow.innerHTML = `
+        <div class="info-item">
+          <span class="info-key">Matched Address</span>
+          <span class="info-val">${address}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-key">Derivation Path</span>
+          <span class="info-val">${data.matchedPath}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-key">Account Index</span>
+          <span class="info-val">${data.matchIndex}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-key">Chain Type</span>
+          <span class="info-val">${data.matchType}</span>
+        </div>
+      `;
+      container.appendChild(infoRow);
+
+      // ── Chain activity ────────────────────────────────────────────────────
+      if (data.chainData && data.chainData.length) {
+        const chainsSection = document.createElement("div");
+        chainsSection.className = "fade-up";
+        chainsSection.style.animationDelay = "0.1s";
+
+        const chainClasses = { "Ethereum": "eth", "BNB Smart Chain": "bsc", "Polygon": "matic" };
+
+        chainsSection.innerHTML = `<div class="chains-title">Chain Activity</div>`;
+
+        const grid = document.createElement("div");
+        grid.className = "chains-grid";
+
+        data.chainData.forEach((c) => {
+          const cls = chainClasses[c.network] || "";
+          const hasError = !!c.error;
+          const balDisplay = hasError ? "—" : (parseFloat(c.balance) === 0 ? "0" : parseFloat(c.balance).toFixed(6));
+          const txDisplay  = hasError ? "—" : c.txCount;
+          const activeBadge = hasError
+            ? `<div class="chain-error">⚠ ${c.error.substring(0, 60)}</div>`
+            : `<span class="active-badge ${c.active ? "yes" : "no"}">${c.active ? "Active" : "Inactive"}</span>`;
+
+          grid.innerHTML += `
+            <div class="chain-card ${cls}">
+              <div class="chain-name">${c.network}</div>
+              <div class="chain-symbol">${c.symbol}</div>
+              <div class="chain-stat">
+                <span class="chain-stat-key">Balance</span>
+                <span class="chain-stat-val">${balDisplay} ${hasError ? "" : c.symbol}</span>
+              </div>
+              <div class="chain-stat">
+                <span class="chain-stat-key">Transactions</span>
+                <span class="chain-stat-val">${txDisplay}</span>
+              </div>
+              ${activeBadge}
+            </div>
+          `;
+        });
+
+        chainsSection.appendChild(grid);
+        container.appendChild(chainsSection);
+      }
+
+      // BTC note
+      if (data.btcNote) {
+        const note = document.createElement("div");
+        note.className = "sample-block fade-up";
+        note.style.marginTop = "1rem";
+        note.innerHTML = `<div class="sample-title">Bitcoin Note</div>
+          <div class="sample-addr">${data.btcNote}</div>`;
+        container.appendChild(note);
+      }
+    }
+
+    // ── Sample addresses on mismatch ────────────────────────────────────────
+    if (!data.match && data.sampleEVM) {
+      const sampleDiv = document.createElement("div");
+      sampleDiv.className = "fade-up";
+      sampleDiv.style.animationDelay = "0.05s";
+      sampleDiv.innerHTML = `
+        <div class="sample-block">
+          <div class="sample-title">First 3 derived EVM addresses (index 0–2)</div>
+          <div class="sample-addr">${data.sampleEVM.map((a, i) => `[${i}] ${a}`).join("<br>")}</div>
+        </div>
+        <div class="sample-block" style="margin-top:0.75rem">
+          <div class="sample-title">First 3 derived BTC addresses (index 0–2)</div>
+          <div class="sample-addr">${data.sampleBTC.map((a, i) => `[${i}] ${a}`).join("<br>")}</div>
+        </div>
+      `;
+      container.appendChild(sampleDiv);
+    }
+
+    container.classList.add("visible");
+    // Smooth scroll to results
+    setTimeout(() => container.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  }
+
+  // ── Enter key shortcut ───────────────────────────────────────────────────────
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.ctrlKey) checkWallet();
+  });
+</script>
+</body>
+</html>

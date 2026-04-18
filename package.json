@@ -1,0 +1,22 @@
+{
+  "name": "wallet-checker",
+  "version": "1.0.0",
+  "description": "Local crypto wallet verifier — BIP39 mnemonic vs address checker with multi-chain activity",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ethers": "^6.9.0",
+    "bip39": "^3.1.0",
+    "bip32": "^4.0.0",
+    "bitcoinjs-lib": "^6.1.5",
+    "tiny-secp256k1": "^2.2.3",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
